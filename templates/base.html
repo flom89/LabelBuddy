@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FilamentBuddy | Filament Manager</title>
+
+    <!-- Tailwind Configuration -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'bambu-green': '#00ae42',
+                        'bambu-dark': '#0d1117',
+                        'bambu-card-bg': '#161b22',
+                        'bambu-border': '#30363d',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- HTMX & Alpine.js -->
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script defer src="https://unpkg.com/alpinejs@3.13.5/dist/cdn.min.js"></script>
+
+    <!-- Custom Styles -->
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap');
+
+        body {
+            background-color: #0d1117;
+            color: #e6edf3;
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .nav-sticky {
+            background-color: rgba(13, 17, 23, 0.8);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid #30363d;
+        }
+
+        .bambu-card {
+            background-color: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 12px;
+            transition: transform 0.2s ease, border-color 0.2s ease;
+        }
+
+        /* Custom Scrollbar for better UX */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0d1117;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #30363d;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #484f58;
+        }
+
+        /* Active navigation state marker */
+        .nav-link-active {
+            position: relative;
+        }
+        .nav-link-active::after {
+            content: '';
+            position: absolute;
+            bottom: -14px;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            background-color: #00ae42;
+        }
+    </style>
+</head>
+<body class="overflow-x-hidden">
+
+<!-- TOP NAVIGATION -->
+<nav class="nav-sticky sticky top-0 z-50 w-full h-14 px-6 flex items-center justify-between"
+     x-data="{ currentPath: window.location.pathname }">
+
+    <div class="flex items-center gap-8">
+        <!-- Logo Section -->
+        <a href="{{ url_for('home') }}" class="flex items-center gap-2 group">
+            <div class="w-10 h-6 bg-bambu-green rounded flex items-center justify-center font-black text-black text-[10px] tracking-tighter transition-transform group-hover:scale-105">
+                LABEL
+            </div>
+            <span class="text-lg font-extrabold tracking-tight text-white uppercase">Buddy</span>
+        </a>
+
+        <!-- Main Navigation Links -->
+        <div class="hidden sm:flex items-center gap-2">
+            <a href="{{ url_for('home') }}"
+               :class="currentPath === '/' ? 'text-white bg-white/10 nav-link-active' : 'text-gray-400 hover:text-white hover:bg-white/5'"
+               class="px-4 py-2 text-xs font-bold uppercase tracking-widest rounded-md transition-all flex items-center gap-2">
+               <span class="text-sm">📦</span> My Spools
+            </a>
+
+            <a href="{{ url_for('credentials') }}"
+               :class="currentPath.includes('credentials') ? 'text-white bg-white/10 nav-link-active' : 'text-gray-400 hover:text-white hover:bg-white/5'"
+               class="px-4 py-2 text-xs font-bold uppercase tracking-widest rounded-md transition-all flex items-center gap-2">
+               <span class="text-sm">⚙️</span> Settings
+            </a>
+        </div>
+    </div>
+
+    <!-- Status Indicator -->
+    <div class="flex items-center gap-4">
+        <div class="flex items-center gap-3 px-3 py-1.5 bg-black/20 rounded-full border border-white/5">
+            <div class="relative flex h-2 w-2">
+                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </div>
+            <div class="hidden xs:block text-left">
+                <div class="text-[8px] text-gray-500 uppercase font-black leading-none">Printer Status</div>
+                <div class="text-[10px] text-emerald-400 font-bold tracking-tight">Connected</div>
+            </div>
+        </div>
+    </div>
+</nav>
+
+<!-- MAIN CONTENT AREA -->
+<div class="min-h-screen">
+    {% block content %}{% endblock %}
+</div>
+
+<!-- FOOTER (Optional) -->
+<footer class="p-8 text-center text-gray-600 text-[10px] uppercase font-bold tracking-[0.2em]">
+    &copy; 2024 FilamentBuddy &bull; Designed for Bambu Lab Users
+</footer>
+
+</body>
+</html>

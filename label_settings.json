@@ -1,0 +1,54 @@
+{
+    "elements": {
+        "id": {
+            "show": true,
+            "x": "31.5",
+            "y": "20",
+            "size": 3.2,
+            "bold": true,
+            "italic": false
+        },
+        "brand": {
+            "show": true,
+            "x": 1.9,
+            "y": "2",
+            "size": "3.4",
+            "bold": false,
+            "italic": true
+        },
+        "material": {
+            "show": true,
+            "x": "1",
+            "y": "6.5",
+            "size": 7.4,
+            "bold": true,
+            "italic": false
+        },
+        "subtype": {
+            "show": true,
+            "x": "1",
+            "y": "13",
+            "size": 3.2,
+            "bold": false,
+            "italic": false
+        },
+        "color": {
+            "show": true,
+            "x": 1.9,
+            "y": 19.8,
+            "size": 3.2,
+            "bold": true,
+            "italic": false
+        },
+        "qr": {
+            "show": true,
+            "x": "25",
+            "y": "0.5",
+            "size": 12.5,
+            "bold": false,
+            "italic": false
+        }
+    },
+    "width": "38",
+    "height": "25"
+}

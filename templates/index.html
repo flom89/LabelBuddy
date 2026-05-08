@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+<div class="text-white">Debug Search: <span x-text="search"></span></div>
+{% block content %}
+    <!-- x-data initializes Alpine.js with the required variables and filtering logic -->
+    <main class="p-4 max-w-[1400px] mx-auto"
+          x-data="{
+        search: '',
+        filterBrand: '',
+        filterMaterial: '',
+        showRow(brand, material, id, color, subtype) {
+            const s = this.search.toLowerCase();
+            // Search covers almost all fields
+            const matchesSearch = !s ||
+                brand.toLowerCase().includes(s) ||
+                material.toLowerCase().includes(s) ||
+                id.toString().includes(s) ||
+                (subtype && subtype.toLowerCase().includes(s));
+
+            const matchesBrand = !this.filterBrand || brand === this.filterBrand;
+            const matchesMaterial = !this.filterMaterial || material === this.filterMaterial;
+
+            return matchesSearch && matchesBrand && matchesMaterial;
+        }
+      }">
+
+        <!-- Welcome / Stats Header -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+            <div class="bambu-card p-4 text-left">
+                <div class="text-gray-500 text-[10px] uppercase font-bold">Total Spools</div>
+                <div class="text-2xl font-bold mt-1">{{ spools|length }}</div>
+            </div>
+            <div class="bambu-card p-4 border-l-4 border-l-bambu-green text-left">
+                <div class="text-gray-500 text-[10px] uppercase font-bold">Active Weight</div>
+                {# Simple total weight calculation via Jinja #}
+                {% set total_weight = spools|sum(attribute='label_weight') - spools|sum(attribute='weight_used') %}
+                <div class="text-2xl font-bold mt-1 text-bambu-green">
+                    {{ (total_weight / 1000)|round(1) }} <span class="text-sm font-normal text-gray-400">kg</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filament Management Table -->
+        <div class="bambu-card overflow-hidden">
+            <div class="p-4 border-b border-gray-800 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-gray-900/30">
+                <h2 class="text-sm font-bold flex items-center gap-2">
+                    <span class="w-2 h-2 bg-bambu-green rounded-full"></span>
+                    Filament Inventory
+                </h2>
+
+                <div class="flex flex-wrap gap-2 w-full md:w-auto">
+                    <!-- Plain Text Search -->
+                    <input x-model="search" type="text" placeholder="Search (Brand, Type, ID...)"
+                           class="bg-gray-800 border border-gray-700 text-[11px] rounded px-3 py-2 outline-none focus:border-bambu-green w-full sm:w-48 transition-colors">
+
+                    <!-- Manufacturer Filter (Auto-populated) -->
+                    <select x-model="filterBrand"
+                            class="bg-gray-800 border border-gray-700 text-[11px] rounded px-2 py-2 outline-none focus:border-bambu-green text-gray-300">
+                        <option value="">All Brands</option>
+                        {% for b in spools|map(attribute='brand')|unique|sort %}
+                            <option value="{{ b }}">{{ b }}</option>
+                        {% endfor %}
+                    </select>
+
+                    <!-- Material Filter (Auto-populated) -->
+                    <select x-model="filterMaterial"
+                            class="bg-gray-800 border border-gray-700 text-[11px] rounded px-2 py-2 outline-none focus:border-bambu-green text-gray-300">
+                        <option value="">All Types</option>
+                        {% for m in spools|map(attribute='material')|unique|sort %}
+                            <option value="{{ m }}">{{ m }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead class="bg-black/40 text-gray-500 text-[10px] uppercase tracking-widest">
+                    <tr>
+                        <th class="px-4 py-3 font-bold">ID</th>
+                        <th class="px-4 py-3 font-bold">Color</th>
+                        <th class="px-4 py-3 font-bold">Brand</th>
+                        <th class="px-4 py-3 font-bold">Type</th>
+                        <th class="px-4 py-3 font-bold">Subtype</th>
+                        <th class="px-4 py-3 font-bold">Nominal Weight</th>
+                        <th class="px-4 py-3 font-bold">Remaining</th>
+                        <th class="px-4 py-3 font-bold text-right">Actions</th>
+                    </tr>
+                    </thead>
+                    <tbody class="text-xs divide-y divide-gray-800/50">
+                    {% for spool in spools %}
+                        {% set weight_remaining = spool.label_weight - spool.weight_used %}
+                        {% set percent = (weight_remaining / spool.label_weight * 100)|round|int if spool.label_weight > 0 else 0 %}
+
+                        <!-- x-show controls visibility based on Alpine function -->
+                        <tr x-show="showRow('{{ spool.brand }}', '{{ spool.material }}', '{{ spool.id }}', '{{ spool.color_name }}', '{{ spool.subtype or '' }}')"
+                            x-transition.opacity.duration.200ms
+                            class="hover:bg-white/[0.02] transition-colors group">
+
+                            <td class="px-4 py-4">
+                                <div class="font-semibold text-gray-200">{{ spool.id }}</div>
+                            </td>
+                            <td class="px-4 py-4">
+                                <div class="flex items-center gap-2">
+                                    <div class="w-5 h-5 rounded-full border border-white/10 shadow-inner"
+                                         style="background-color: #{{ spool.rgba[:6] }};"></div>
+                                </div>
+                            </td>
+                            <td class="px-4 py-4 text-gray-200">{{ spool.brand }}</td>
+
+                            <!-- Material Badge -->
+                            <td class="px-4 py-4">
+                                {% if spool.material == 'PLA' or 'PLA' in spool.material %}
+                                    {% set badge_css = "bg-bambu-green/10 text-bambu-green border-bambu-green/20" %}
+                                {% elif spool.material == 'PETG' or 'PET' in spool.material %}
+                                    {% set badge_css = "bg-blue-500/10 text-blue-400 border-blue-500/20" %}
+                                {% elif spool.material in ['ASA', 'ABS', 'HIPS'] %}
+                                    {% set badge_css = "bg-orange-500/10 text-orange-400 border-orange-500/20" %}
+                                {% else %}
+                                    {% set badge_css = "bg-gray-700/30 text-gray-400 border-gray-600" %}
+                                {% endif %}
+                                <span class="{{ badge_css }} border px-2 py-0.5 rounded text-[10px] font-bold tracking-widest">{{ spool.material }}</span>
+                            </td>
+
+                            <td class="px-4 py-4 text-gray-400">{{ spool.subtype or '---' }}</td>
+                            <td class="px-4 py-4 text-gray-200">{{ spool.label_weight }} g</td>
+
+                            <!-- Progress -->
+                            <td class="px-4 py-4">
+                                <div class="w-32">
+                                    <div class="flex justify-between text-[10px] mb-1">
+                                        <span class="font-bold {% if percent < 15 %}text-orange-400 animate-pulse{% else %}text-gray-300{% endif %}">{{ weight_remaining }}g</span>
+                                        <span class="text-gray-500">{{ percent }}%</span>
+                                    </div>
+                                    <div class="h-1 bg-gray-800 rounded-full overflow-hidden">
+                                        <div class="h-full rounded-full transition-all duration-500 {% if percent < 15 %}bg-orange-500{% else %}bg-bambu-green{% endif %}"
+                                             style="width: {{ percent }}%"></div>
+                                    </div>
+                                </div>
+                            </td>
+
+
+                            <td class="px-4 py-4 text-right">
+                                <div class="flex justify-end gap-2">
+
+                                    <a href="/spool/{{ spool.id }}"
+                                       class="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider px-3 py-1.5 bg-transparent border border-gray-700 hover:border-blue-500 hover:text-blue-400 text-gray-400 rounded-md transition-all active:scale-95 shadow-sm">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24"
+                                             fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
+                                             stroke-linejoin="round">
+                                            <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path>
+                                            <circle cx="12" cy="12" r="3"></circle>
+                                        </svg>
+                                        <span>Details</span>
+                                    </a>
+
+                                    <a href="/spool/{{ spool.id }}/label"
+                                       class="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider px-3 py-1.5 bg-gray-800 hover:bg-bambu-green hover:text-black text-gray-300 rounded-md transition-all active:scale-95 shadow-sm border border-gray-700/50 hover:border-bambu-green">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24"
+                                             fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
+                                             stroke-linejoin="round">
+                                            <polyline points="6 9 6 2 18 2 18 9"></polyline>
+                                            <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                                            <rect x="6" y="14" width="12" height="8"></rect>
+                                        </svg>
+                                        <span>Generate Label</span>
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+{% endblock %}

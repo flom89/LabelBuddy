@@ -1,0 +1,32 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+.env
+.venv
+env/
+venv/
+ENV/
+
+# --- FilamentBuddy Specific ---
+# Wir ignorieren den gesamten data-Ordner,
+# da dieser nur lokal beim User existieren soll.
+data/
+
+# Falls die Datenbank direkt im Hauptverzeichnis liegt:
+*.db
+*.sqlite3
+
+# --- OS Specific ---
+.DS_Store
+Thumbs.db
+
+# --- IDEs ---
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# --- Docker ---
+# Falls du lokale Build-Logs oder temporäre Docker-Files hast
+.dockerignore

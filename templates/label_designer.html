@@ -1,0 +1,381 @@
+{% extends "base.html" %}
+
+{% block content %}
+    <main class="p-4 max-w-[1900px] mx-auto h-[94vh] flex flex-col font-sans text-white"
+          x-data="{
+        width: 60, height: 30,
+        lastSaved: 'Unknown',
+        previewScale: 5,
+        templates: {},
+        templateName: '',
+        elements: {
+            id:       { show: true, x: 2,  y: 2,  size: 3, bold: true,  italic: false },
+            brand:    { show: true, x: 2,  y: 6,  size: 3, bold: false, italic: true },
+            material: { show: true, x: 2,  y: 12, size: 8, bold: true,  italic: false },
+            subtype:  { show: true, x: 2,  y: 20, size: 4, bold: false, italic: true },
+            color:    { show: true, x: 2,  y: 24, size: 4, bold: true,  italic: false },
+            qr:       { show: true, x: 42, y: 5,  size: 16, bold: false, italic: false }
+        },
+
+        async loadTemplates() {
+            try {
+                const res = await fetch('/api/labels/templates');
+                const data = await res.json();
+                this.templates = (data && typeof data === 'object') ? data : {};
+            } catch (e) { console.error('Template Load Error', e); }
+        },
+
+        async saveAsTemplate() {
+            if (!this.templateName) return alert('Please enter a name');
+            const payload = { elements: this.elements, width: this.width, height: this.height };
+            await fetch(`/api/labels/templates/${this.templateName}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            this.templateName = '';
+            await this.loadTemplates();
+        },
+
+        applyTemplate(name) {
+            const t = this.templates[name];
+            this.elements = JSON.parse(JSON.stringify(t.elements));
+            this.width = t.width;
+            this.height = t.height;
+            generateQR();
+        },
+
+        confirms: {},
+
+        async deleteTemplate(name) {
+            // Activate confirmation mode on first click
+            if (!this.confirms[name]) {
+                this.confirms[name] = true;
+                // Reset status after 3 seconds if not clicked again
+                setTimeout(() => { delete this.confirms[name]; }, 3000);
+                return;
+            }
+
+            try {
+                const res = await fetch(`/api/labels/templates/${name}`, {
+                    method: 'DELETE'
+                });
+
+                if (res.ok) {
+                    delete this.confirms[name];
+                    await this.loadTemplates();
+                } else {
+                    console.error('Server error during deletion');
+                }
+            } catch (e) {
+                console.error('Delete error:', e);
+            }
+        },
+
+        async loadFromServer() {
+            try {
+                const res = await fetch('/api/label-config');
+                const data = await res.json();
+                if (data && data.elements) {
+                    this.elements = data.elements;
+                    this.width = data.width || 60;
+                    this.height = data.height || 30;
+                    this.lastSaved = 'Synced';
+                }
+            } catch (e) { console.error('Load error', e); }
+        },
+
+        async saveToServer() {
+            try {
+                await fetch('/api/label-config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ elements: this.elements, width: this.width, height: this.height })
+                });
+                this.lastSaved = new Date().toLocaleTimeString();
+            } catch (e) { console.error('Save error', e); }
+        },
+
+        init() {
+            Promise.all([this.loadFromServer(), this.loadTemplates()]).then(() => {
+                this.$nextTick(() => generateQR());
+            });
+            this.$watch('elements.qr', () => generateQR());
+        },
+
+        optimizeLayout() {
+            const w = parseFloat(this.width);
+            const h = parseFloat(this.height);
+            const padding = w * 0.05;
+            const splitPoint = w * 0.62;
+            const usableHeight = h - (padding * 2);
+
+            const qrSize = Math.min(w - splitPoint - padding, h * 0.8);
+            this.elements.qr.size = parseFloat(qrSize.toFixed(1));
+            this.elements.qr.x = parseFloat((splitPoint + ((w - splitPoint - padding) - qrSize) / 2).toFixed(1));
+            this.elements.qr.y = parseFloat(((h - qrSize) / 2).toFixed(1));
+
+            const weights = { id: 0.15, brand: 0.12, material: 0.35, subtype: 0.15, color: 0.15 };
+            let currentY = padding;
+            ['id', 'brand', 'material', 'subtype', 'color'].forEach(key => {
+                const el = this.elements[key];
+                el.size = parseFloat((usableHeight * weights[key]).toFixed(1));
+                el.x = parseFloat(padding.toFixed(1));
+                el.y = parseFloat(currentY.toFixed(1));
+                currentY += el.size * 1.1;
+            });
+            generateQR();
+        }
+    }">
+
+        <div class="flex flex-col lg:flex-row gap-4 h-full overflow-hidden">
+
+            <!-- COLUMN 1: CONTROL CENTER -->
+            <div class="w-full lg:w-[320px] flex flex-col gap-4 shrink-0">
+                <div class="bg-gray-800 p-5 rounded-2xl border border-white/10 shadow-xl">
+                    <div class="flex justify-between items-center mb-6">
+                        <span class="text-xs font-black text-green-400 uppercase tracking-widest">Controls</span>
+                        <button @click="optimizeLayout()"
+                                title="Auto-Layout"
+                                class="p-2 bg-gray-700 rounded-lg hover:bg-gray-600 transition-all">
+                            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                            </svg>
+                        </button>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3 mb-4">
+                        <div>
+                            <label class="text-[10px] text-gray-500 uppercase font-black">Width (mm)</label>
+                            <input type="number" x-model="width"
+                                   class="w-full bg-black/40 border border-white/10 rounded-lg p-2 text-sm">
+                        </div>
+                        <div>
+                            <label class="text-[10px] text-gray-500 uppercase font-black">Height (mm)</label>
+                            <input type="number" x-model="height"
+                                   class="w-full bg-black/40 border border-white/10 rounded-lg p-2 text-sm">
+                        </div>
+                    </div>
+
+                    <button @click="saveToServer()"
+                            class="w-full bg-green-600 hover:bg-green-500 py-3 rounded-xl text-xs font-black uppercase mb-2 transition-all">
+                        Save Configuration
+                    </button>
+                    <div class="text-[10px] text-center text-gray-500 font-mono" x-text="'Last Saved: ' + lastSaved"></div>
+                </div>
+
+                <!-- Templates Section -->
+                <div class="bg-gray-800 p-5 rounded-2xl border border-white/10 flex-1 flex flex-col overflow-hidden">
+                    <label class="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-3">Layout Templates</label>
+                    <div class="flex gap-2 mb-4">
+                        <input type="text" x-model="templateName" placeholder="Name..."
+                               class="flex-1 bg-black/40 border border-white/10 rounded-lg p-2 text-xs">
+                        <button @click="saveAsTemplate()" class="bg-blue-600 px-3 rounded-lg text-[10px] font-bold">
+                            SAVE
+                        </button>
+                    </div>
+                    <div class="flex-1 overflow-y-auto custom-scrollbar space-y-1">
+                        <template x-for="(data, name) in templates" :key="name">
+                            <div class="flex items-center justify-between bg-black/20 p-2 rounded-lg group">
+                                <span class="text-[11px] truncate pr-2 text-gray-300" x-text="name"></span>
+                                <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                                    <button @click="applyTemplate(name)"
+                                            title="Apply Template"
+                                            class="text-green-400 p-1 hover:bg-green-500/20 rounded">
+                                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                  d="M5 13l4 4L19 7"></path>
+                                        </svg>
+                                    </button>
+                                    <button @click="deleteTemplate(name)"
+                                            :class="confirms[name] ? 'bg-red-600 text-white animate-pulse' : 'text-red-400 hover:bg-red-500/20'"
+                                            class="p-1 rounded transition-all flex items-center gap-1">
+
+                                        <!-- Tiny text hint when active -->
+                                        <span x-show="confirms[name]" class="text-[8px] font-bold">DELETE?</span>
+
+                                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
+                <button @click="openExportPopup()"
+                        class="bg-blue-600 hover:bg-blue-500 py-4 rounded-2xl text-xs font-black uppercase tracking-widest shadow-lg">
+                    Export Label
+                </button>
+            </div>
+
+            <!-- COLUMN 2: ELEMENT CONTROLS -->
+            <div class="w-full lg:w-[500px] space-y-2 overflow-y-auto custom-scrollbar pr-2 h-full">
+                <template x-for="(config, name) in elements">
+
+                    <div class="bg-gray-800/40 border border-white/5 p-3 rounded-xl hover:bg-gray-800/60 transition-colors">
+                        <!-- Header: Name & Style Buttons -->
+                        <div class="flex items-center justify-between mb-3">
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" x-model="config.show"
+                                       class="w-4 h-4 rounded border-gray-700 bg-black text-green-500 focus:ring-0">
+                                <span class="text-xs font-black uppercase text-gray-200 tracking-wider"
+                                      x-text="name"></span>
+                            </label>
+                            <div class="flex gap-1" x-show="name !== 'qr' && config.show">
+                                <button @click="config.bold = !config.bold"
+                                        :class="config.bold ? 'bg-white text-black' : 'bg-gray-700 text-gray-400'"
+                                        class="w-7 h-6 rounded text-[10px] font-bold">B
+                                </button>
+                                <button @click="config.italic = !config.italic"
+                                        :class="config.italic ? 'bg-white text-black' : 'bg-gray-700 text-gray-400'"
+                                        class="w-7 h-6 rounded text-[10px] italic">I
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Grid for X, Y and Size -->
+                        <div class="grid grid-cols-3 gap-4" x-show="config.show">
+                            <!-- X Position -->
+                            <div class="space-y-1">
+                                <div class="flex justify-between items-end">
+                                    <span class="text-[8px] text-gray-500 font-bold uppercase">X</span>
+                                    <span class="text-[11px] font-mono text-green-400 font-bold"
+                                          x-text="config.x"></span>
+                                </div>
+                                <input type="range" step="0.5" min="0" :max="width" x-model="config.x"
+                                       class="w-full h-1.5 bg-black rounded-lg appearance-none accent-green-500 cursor-pointer">
+                            </div>
+                            <!-- Y Position -->
+                            <div class="space-y-1">
+                                <div class="flex justify-between items-end">
+                                    <span class="text-[8px] text-gray-500 font-bold uppercase">Y</span>
+                                    <span class="text-[11px] font-mono text-green-400 font-bold"
+                                          x-text="config.y"></span>
+                                </div>
+                                <input type="range" step="0.5" min="0" :max="height" x-model="config.y"
+                                       class="w-full h-1.5 bg-black rounded-lg appearance-none accent-green-500 cursor-pointer">
+                            </div>
+                            <!-- Size -->
+                            <div class="space-y-1">
+                                <div class="flex justify-between items-end">
+                                    <span class="text-[8px] text-gray-500 font-bold uppercase">Size</span>
+                                    <span class="text-[11px] font-mono text-white font-bold"
+                                          x-text="config.size"></span>
+                                </div>
+                                <input type="range" step="0.1" min="1" max="50" x-model="config.size"
+                                       class="w-full h-1.5 bg-black rounded-lg appearance-none accent-white cursor-pointer">
+                            </div>
+                        </div>
+                    </div>
+                </template>
+            </div>
+
+            <!-- COLUMN 3: PREVIEW -->
+            <div class="flex-1 bg-black/40 rounded-3xl border border-white/5 flex items-center justify-center p-8 relative overflow-hidden h-full">
+                <div id="label-canvas" class="bg-white text-black shadow-2xl relative overflow-hidden"
+                     :style="`width: ${width * previewScale}px; height: ${height * previewScale}px;` ">
+
+                    <div x-show="elements.id.show" class="absolute leading-none"
+                         :style="`left: ${elements.id.x * previewScale}px; top: ${elements.id.y * previewScale}px; font-size: ${elements.id.size * previewScale}px; font-weight: ${elements.id.bold ? '900' : '400'}; font-style: ${elements.id.italic ? 'italic' : 'normal'}; opacity: 0.4;` ">
+                        #{{ spool.id }}</div>
+                    <div x-show="elements.brand.show" class="absolute leading-none uppercase opacity-60"
+                         :style="`left: ${elements.brand.x * previewScale}px; top: ${elements.brand.y * previewScale}px; font-size: ${elements.brand.size * previewScale}px; font-weight: ${elements.brand.bold ? '900' : '400'}; font-style: ${elements.brand.italic ? 'italic' : 'normal'};` ">{{ spool.brand }}</div>
+                    <div x-show="elements.material.show" class="absolute leading-[0.8] font-black"
+                         :style="`left: ${elements.material.x * previewScale}px; top: ${elements.material.y * previewScale}px; font-size: ${elements.material.size * previewScale}px; font-weight: ${elements.material.bold ? '900' : '400'}; font-style: ${elements.material.italic ? 'italic' : 'normal'};` ">{{ spool.material }}</div>
+                    <div x-show="elements.subtype.show" class="absolute leading-none uppercase text-gray-500"
+                         :style="`left: ${elements.subtype.x * previewScale}px; top: ${elements.subtype.y * previewScale}px; font-size: ${elements.subtype.size * previewScale}px; font-weight: ${elements.subtype.bold ? '900' : '400'}; font-style: ${elements.subtype.italic ? 'italic' : 'normal'};` ">{{ spool.subtype or '' }}</div>
+                    <div x-show="elements.color.show" class="absolute flex items-center gap-1"
+                         :style="`left: ${elements.color.x * previewScale}px; top: ${elements.color.y * previewScale}px; font-size: ${elements.color.size * previewScale}px; font-weight: ${elements.color.bold ? '900' : '400'}; font-style: ${elements.color.italic ? 'italic' : 'normal'};` ">
+                        <div class="rounded-full border border-black/10"
+                             :style="`width: ${elements.color.size * 0.7 * previewScale}px; height: ${elements.color.size * 0.7 * previewScale}px; background-color: #{{ spool.rgba[:6] if spool.rgba else 'CCC' }};` "></div>
+                        {{ spool.color_name }}
+                    </div>
+                    <div x-show="elements.qr.show" class="absolute bg-white"
+                         :style="`left: ${elements.qr.x * previewScale}px; top: ${elements.qr.y * previewScale}px; width: ${elements.qr.size * previewScale}px; height: ${elements.qr.size * previewScale}px;` ">
+                        <div id="qrcode-target" class="w-full h-full"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script>
+        function generateQR() {
+            const target = document.getElementById('qrcode-target');
+            if (!target) return;
+            target.innerHTML = '';
+            new QRCode(target, {text: window.location.origin + "/spool/{{ spool.id }}", width: 256, height: 256});
+        }
+
+        async function openExportPopup() {
+            const alpineEl = document.querySelector('[x-data]');
+            const data = alpineEl.__x ? alpineEl.__x.$data : (alpineEl._x_dataStack ? alpineEl._x_dataStack[0] : null);
+            await data.saveToServer();
+
+            const pngUrl = `/api/label-export/{{ spool.id }}?format=png&t=${Date.now()}`;
+            const pdfUrl = `/api/label-export/{{ spool.id }}?format=pdf&t=${Date.now()}`;
+            const pWin = window.open('Export Label', '_blank', 'width=450,height=250');
+
+            pWin.document.write(`
+            <html><head><title>Label Export</title><style>
+                body { background: #111; color: white; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
+                .preview { background: white; padding: 10px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+                img { width: ${data.width * 4}px; height: auto; image-rendering: pixelated; }
+                .btns { display: flex; gap: 10px; }
+                .btn { padding: 12px 24px; border-radius: 8px; font-weight: bold; text-decoration: none; text-transform: uppercase; font-size: 12px; transition: opacity 0.2s; }
+                .btn:hover { opacity: 0.8; }
+                .pdf { background: #e74c3c; color: white; }
+                .png { background: #fff; color: #000; }
+            </style></head><body>
+                <div class="preview"><img src="${pngUrl}"></div>
+                <div class="btns">
+                    <a href="${pdfUrl}" class="btn pdf">Download PDF</a>
+                    <a href="${pngUrl}" download="label_${Date.now()}.png" class="btn png">Download PNG</a>
+                </div>
+            </body></html>
+        `);
+            pWin.document.close();
+        }
+    </script>
+
+    <style>
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+        }
+
+        #label-canvas {
+            font-family: 'Inter', system-ui, sans-serif;
+        }
+
+        input[type=range] {
+            -webkit-appearance: none;
+            background: #000;
+            height: 4px;
+            border-radius: 2px;
+        }
+
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 12px;
+            height: 12px;
+            background: #00ae42;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid white;
+        }
+    </style>
+{% endblock %}

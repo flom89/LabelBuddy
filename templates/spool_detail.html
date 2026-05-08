@@ -1,0 +1,244 @@
+{% extends "base.html" %}
+
+{% block content %}
+<main class="min-h-screen bg-[#05070a] text-white p-4 font-sans" x-data="spoolManager()">
+
+    <!-- IN-APP NOTIFICATIONS (Statt Popups, da iFrame-sicher) -->
+    <div class="fixed top-6 left-1/2 -translate-x-1/2 z-50 w-[90%] max-w-xs space-y-2">
+        <template x-if="notification">
+            <div :class="notification.type === 'error' ? 'bg-red-600' : 'bg-blue-600'"
+                 class="px-4 py-3 rounded-2xl shadow-2xl text-center text-[10px] font-black uppercase tracking-widest animate-in fade-in slide-in-from-top-4 duration-300">
+                <span x-text="notification.text"></span>
+            </div>
+        </template>
+    </div>
+
+    <!-- HEADER & NAVIGATION -->
+    <div class="max-w-md mx-auto mb-6 flex justify-between items-center px-4">
+        <div class="flex items-center gap-4">
+            <a href="/" class="p-2 -ml-2 text-slate-500 hover:text-white transition-colors">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="3" d="M15 19l-7-7 7-7"/></svg>
+            </a>
+            <div>
+                <h1 class="text-[10px] font-black uppercase tracking-[0.2em] text-blue-500" x-text="spool.brand || 'Filament'"></h1>
+                <div class="text-lg font-black tracking-tight" x-text="spool.material + ' ' + (spool.subtype || '')"></div>
+            </div>
+        </div>
+
+        <div class="flex gap-2" x-data="{ confirmDelete: false }">
+            <!-- LÖSCHEN BUTTON (Zwei-Phasen) -->
+            <button @click="if(!confirmDelete) { confirmDelete = true; setTimeout(() => confirmDelete = false, 3000) } else { deleteSpool() }"
+                    :class="confirmDelete ? 'bg-red-600 w-24' : 'bg-slate-900 w-10'"
+                    class="h-10 rounded-full border border-white/10 transition-all duration-300 flex items-center justify-center overflow-hidden">
+                <template x-if="!confirmDelete">
+                    <svg class="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                </template>
+                <template x-if="confirmDelete">
+                    <span class="text-[8px] font-black uppercase tracking-tighter text-white">Sicher?</span>
+                </template>
+            </button>
+
+            <!-- DUPLIZIEREN BUTTON -->
+            <button @click="duplicateSpool()"
+                    :disabled="isProcessing"
+                    class="bg-slate-800 p-2.5 rounded-full hover:bg-slate-700 transition-all active:scale-90 disabled:opacity-50">
+                <svg x-show="!isProcessing" class="w-5 h-5 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
+                </svg>
+                <svg x-show="isProcessing" class="w-5 h-5 animate-spin" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+            </button>
+
+            <!-- EDIT BUTTON -->
+            <button @click="isEditing = !isEditing" class="bg-slate-900 border border-white/10 p-2.5 rounded-full transition-all">
+                <span x-show="!isEditing" class="text-[10px] font-black uppercase px-1 text-slate-400 tracking-widest">Edit</span>
+                <span x-show="isEditing" class="text-red-500 font-black px-2 text-xs">X</span>
+            </button>
+        </div>
+    </div>
+
+    <div class="max-w-md mx-auto space-y-4 pb-20">
+
+        <!-- VISUAL SPOOL CARD -->
+        <div class="bg-[#0f1218] border border-white/5 rounded-[2.5rem] overflow-hidden shadow-2xl">
+            <div class="relative h-28 w-full" :style="'background: linear-gradient(180deg, ' + currentColor + '22 0%, #0f1218 100%)'">
+                <div class="absolute inset-0 flex items-center justify-center pt-4">
+                    <div class="w-16 h-16 rounded-full border-[4px] border-slate-900 shadow-2xl flex items-center justify-center" :style="'background-color: ' + currentColor">
+                        <div class="w-3 h-3 rounded-full bg-[#0f1218] border border-white/10"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="p-6 pt-2">
+                <div class="text-center mb-6">
+                    <div class="text-xs font-bold text-slate-500 uppercase tracking-widest" x-text="spool.color_name"></div>
+                    <div class="text-[10px] font-medium text-slate-600 mt-1 uppercase">ID: #<span x-text="spool.id"></span></div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4 text-center">
+                    <div class="bg-white/[0.03] p-4 rounded-3xl border border-white/5">
+                        <span class="text-[9px] font-black text-slate-500 uppercase block mb-1">Letzte Wägung</span>
+                        <div class="text-xl font-black text-white" x-text="spool.last_scale_weight ? spool.last_scale_weight + 'g' : '---'"></div>
+                    </div>
+                    <div class="bg-white/[0.03] p-4 rounded-3xl border border-white/5">
+                        <span class="text-[9px] font-black text-slate-500 uppercase block mb-1">Verbraucht</span>
+                        <div class="text-xl font-black text-orange-500" x-text="spool.weight_used + 'g'"></div>
+                    </div>
+                </div>
+
+                <button @click="isWeighing = true; isEditing = true" class="w-full mt-4 py-3 bg-blue-600/10 border border-blue-500/20 rounded-2xl text-blue-400 text-[10px] font-black uppercase tracking-[0.2em] hover:bg-blue-600/20 transition-all">
+                    Wiegevorgang starten
+                </button>
+            </div>
+        </div>
+
+        <!-- SETTINGS / INPUTS -->
+        <div class="bg-[#0f1218] border border-white/5 rounded-[2rem] p-6 space-y-4 shadow-xl">
+
+            <template x-if="isWeighing">
+                <div class="space-y-1 mb-4 animate-in slide-in-from-bottom-2 duration-300">
+                    <label class="text-[9px] font-black text-blue-500 uppercase tracking-widest">Gewicht auf der Waage (g)</label>
+                    <input type="number" x-model="spool.last_scale_weight" @input="calculateUsage()"
+                           class="w-full bg-blue-500/5 border border-blue-500/30 rounded-xl p-4 text-3xl font-black outline-none focus:border-blue-500 transition-all">
+                </div>
+            </template>
+
+            <div class="grid grid-cols-2 gap-4">
+                <div class="space-y-1">
+                    <label class="text-[9px] font-black text-slate-600 uppercase tracking-tighter">Netto Filament (g)</label>
+                    <input type="number" x-model="spool.label_weight" @input="calculateUsage()" :disabled="!isEditing"
+                           class="w-full bg-slate-900/50 border border-white/5 rounded-xl p-3 font-bold outline-none focus:border-blue-500/50 disabled:bg-transparent disabled:p-0 transition-all">
+                </div>
+                <div class="space-y-1">
+                    <label class="text-[9px] font-black text-slate-600 uppercase tracking-tighter">Leerspule (g)</label>
+                    <input type="number" x-model="spool.core_weight" @input="calculateUsage()" :disabled="!isEditing"
+                           class="w-full bg-slate-900/50 border border-white/5 rounded-xl p-3 font-bold outline-none focus:border-blue-500/50 disabled:bg-transparent disabled:p-0 transition-all">
+                </div>
+            </div>
+
+            <div x-show="isEditing" class="pt-4 border-t border-white/5">
+                <button @click="saveChanges()"
+                        class="w-full py-4 rounded-2xl font-black uppercase tracking-[0.2em] text-[10px] shadow-2xl transition-all active:scale-[0.97] bg-white text-black">
+                    Änderungen Speichern
+                </button>
+            </div>
+        </div>
+
+        <div class="px-6 py-4 flex justify-between text-[9px] font-bold text-slate-700 uppercase tracking-[0.2em]">
+            <span>Hinzugefügt: <span x-text="new Date(spool.created_at).toLocaleDateString()"></span></span>
+            <span x-show="spool.last_weighed_at">Zuletzt gewogen: <span x-text="new Date(spool.last_weighed_at).toLocaleDateString()"></span></span>
+        </div>
+    </div>
+</main>
+
+<script>
+function spoolManager() {
+    return {
+        isEditing: false,
+        isWeighing: false,
+        isProcessing: false,
+        notification: null,
+        spool: {{ spool | tojson | safe }},
+
+        get currentColor() {
+            let c = (this.spool.rgba || "334155").replace("#", "");
+            if (c.length === 8) c = c.substring(0, 6);
+            return "#" + c;
+        },
+
+        notify(text, type = 'success') {
+            this.notification = { text, type };
+            setTimeout(() => this.notification = null, 3000);
+        },
+
+        calculateUsage() {
+            const label = parseFloat(this.spool.label_weight) || 0;
+            const core = parseFloat(this.spool.core_weight) || 0;
+            const scale = parseFloat(this.spool.last_scale_weight) || 0;
+            if (scale > 0) {
+                const used = (label + core) - scale;
+                this.spool.weight_used = parseFloat(Math.max(0, used).toFixed(2));
+            }
+        },
+
+        async saveChanges() {
+            this.isProcessing = true;
+            this.calculateUsage();
+
+            // Timestamp für die Wägung setzen
+            const now = new Date();
+            this.spool.last_weighed_at = new Date(now.getTime() - (now.getTimezoneOffset() * 60000)).toISOString().split('.')[0];
+
+            try {
+                const response = await fetch("/api/v1/inventory/spools/" + this.spool.id, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(this.spool)
+                });
+
+                if (response.ok) {
+                    this.notify("Daten aktualisiert!");
+                    setTimeout(() => window.location.reload(), 1000);
+                } else {
+                    this.notify("Fehler: " + response.status, "error");
+                }
+            } catch (e) {
+                this.notify("Verbindungsfehler", "error");
+            }
+            this.isProcessing = false;
+        },
+
+        async duplicateSpool() {
+            this.isProcessing = true;
+            const data = JSON.parse(JSON.stringify(this.spool));
+
+            // IDs entfernen für Neuanlage
+            delete data.id;
+            delete data.created_at;
+            delete data.updated_at;
+            data.weight_used = 0;
+            data.last_scale_weight = null;
+            data.last_weighed_at = null;
+
+            try {
+                const response = await fetch("/api/v1/inventory/spools", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(data)
+                });
+
+                if (response.ok) {
+                    this.notify("Duplikat erstellt!");
+                    setTimeout(() => window.location.href = "/", 1200);
+                } else {
+                    this.notify("POST Fehler: " + response.status, "error");
+                }
+            } catch (e) {
+                this.notify("Netzwerkfehler", "error");
+            }
+            this.isProcessing = false;
+        },
+
+        async deleteSpool() {
+            this.isProcessing = true;
+            try {
+                const response = await fetch("/api/v1/inventory/spools/" + this.spool.id, {
+                    method: "DELETE"
+                });
+
+                if (response.ok) {
+                    this.notify("Spule gelöscht!");
+                    setTimeout(() => window.location.href = "/", 1000);
+                } else {
+                    this.notify("Fehler beim Löschen", "error");
+                }
+            } catch (e) {
+                this.notify("Netzwerkfehler", "error");
+            }
+            this.isProcessing = false;
+        }
+    };
+}
+</script>
+{% endblock %}
